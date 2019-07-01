@@ -115,6 +115,7 @@ class Crazyflie:
             rospy.loginfo(self.msg.zDistance)
             self.pub.publish(self.msg)
             self.rate.sleep()
+            self.goTo(0.08, 0.0, 0.18, 0)
 
     # take off to z distance
     def takeOff(self, zDistance):
@@ -159,9 +160,9 @@ class Crazyflie:
         self.stop_pub.publish(self.stop_msg)
 
 def handler(cf):
-    cf.takeOff(0.1)
-    cf.goTo(10.0, 0.0, 0.1, 0)
-    cf.land()
+    cf.takeOff(0.18)
+    cf.goTo(0.08, 0.0, 0.18, 0)
+    # cf.land()
 
 if __name__ == '__main__':
     rospy.init_node('hover', anonymous=True)
