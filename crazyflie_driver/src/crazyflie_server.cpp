@@ -4,6 +4,7 @@
 #include "crazyflie_driver/AddCrazyflie.h"
 #include "crazyflie_driver/GoTo.h"
 #include "crazyflie_driver/Land.h"
+#include "crazyflie_driver/NotifySetpointsStop.h"
 #include "crazyflie_driver/RemoveCrazyflie.h"
 #include "crazyflie_driver/SetGroupMask.h"
 #include "crazyflie_driver/StartTrajectory.h"
@@ -19,6 +20,7 @@
 #include "crazyflie_driver/Hover.h"
 #include "crazyflie_driver/Stop.h"
 #include "crazyflie_driver/Position.h"
+#include "crazyflie_driver/VelocityWorld.h"
 #include "crazyflie_driver/crtpPacket.h"
 #include "crazyflie_cpp/Crazyradio.h"
 #include "crazyflie_cpp/crtp.h"
@@ -126,8 +128,10 @@ public:
     , m_serviceGoTo()
     , m_serviceUploadTrajectory()
     , m_serviceStartTrajectory()
+    , m_serviceNotifySetpointsStop()
     , m_subscribeCmdVel()
     , m_subscribeCmdFullState()
+    , m_subscribeCmdVelocityWorld()
     , m_subscribeCmdHover()
     , m_subscribeCmdStop()
     , m_subscribeCmdPosition()
@@ -211,7 +215,7 @@ private:
   }
 
   template<class T, class U>
-  void updateParam(uint8_t id, const std::string& ros_param) {
+  void updateParam(uint16_t id, const std::string& ros_param) {
       U value;
       ros::param::get(ros_param, value);
       m_cf.setParam<T>(id, (T)value);
@@ -351,6 +355,23 @@ void cmdPositionSetpoint(
     }
   }
 
+  void cmdVelocityWorldSetpoint(
+    const crazyflie_driver::VelocityWorld::ConstPtr& msg)
+  {
+    //ROS_INFO("got a velocity world setpoint");
+    if (!m_isEmergency) {
+      float x = msg->vel.x;
+      float y = msg->vel.y;
+      float z = msg->vel.z;
+      float yawRate = msg->yawRate;
+
+      m_cf.sendVelocityWorldSetpoint(
+        x, y, z, yawRate);
+      m_sentSetpoint = true;
+      //ROS_INFO("set a velocity world setpoint");
+    }
+  }
+
   void positionMeasurementChanged(
     const geometry_msgs::PointStamped::ConstPtr& msg)
   {
@@ -374,6 +395,7 @@ void cmdPositionSetpoint(
 
     m_subscribeCmdVel = n.subscribe(m_tf_prefix + "/cmd_vel", 1, &CrazyflieROS::cmdVelChanged, this);
     m_subscribeCmdFullState = n.subscribe(m_tf_prefix + "/cmd_full_state", 1, &CrazyflieROS::cmdFullStateSetpoint, this);
+    m_subscribeCmdVelocityWorld = n.subscribe(m_tf_prefix+"/cmd_velocity_world", 1, &CrazyflieROS::cmdVelocityWorldSetpoint, this);
     m_subscribeExternalPosition = n.subscribe(m_tf_prefix + "/external_position", 1, &CrazyflieROS::positionMeasurementChanged, this);
     m_subscribeExternalPose = n.subscribe(m_tf_prefix + "/external_pose", 1, &CrazyflieROS::poseMeasurementChanged, this);
     m_serviceEmergency = n.advertiseService(m_tf_prefix + "/emergency", &CrazyflieROS::emergency, this);
@@ -389,6 +411,7 @@ void cmdPositionSetpoint(
     m_serviceGoTo = n.advertiseService(m_tf_prefix + "/go_to", &CrazyflieROS::goTo, this);
     m_serviceUploadTrajectory = n.advertiseService(m_tf_prefix + "/upload_trajectory", &CrazyflieROS::uploadTrajectory, this);
     m_serviceStartTrajectory = n.advertiseService(m_tf_prefix + "/start_trajectory", &CrazyflieROS::startTrajectory, this);
+    m_serviceNotifySetpointsStop = n.advertiseService(m_tf_prefix + "/notify_setpoints_stop", &CrazyflieROS::notifySetpointsStop, this);
 
     if (m_enable_logging_imu) {
       m_pubImu = n.advertise<sensor_msgs::Imu>(m_tf_prefix + "/imu", 10);
@@ -809,6 +832,15 @@ void cmdPositionSetpoint(
     return true;
   }
 
+  bool notifySetpointsStop(
+    crazyflie_driver::NotifySetpointsStop::Request& req,
+    crazyflie_driver::NotifySetpointsStop::Response& res)
+  {
+    ROS_INFO_NAMED(m_tf_prefix, "NotifySetpointsStop requested");
+    m_cf.notifySetpointsStop(req.remainValidMillisecs);
+    return true;
+  }
+
 private:
   std::string m_tf_prefix;
   Crazyflie m_cf;
@@ -839,6 +871,7 @@ private:
   ros::ServiceServer m_serviceGoTo;
   ros::ServiceServer m_serviceUploadTrajectory;
   ros::ServiceServer m_serviceStartTrajectory;
+  ros::ServiceServer m_serviceNotifySetpointsStop;
 
   ros::Subscriber m_subscribeCmdVel;
   ros::Subscriber m_subscribeCmdFullState;
@@ -847,6 +880,7 @@ private:
   ros::Subscriber m_subscribeCmdPosition;
   ros::Subscriber m_subscribeExternalPosition;
   ros::Subscriber m_subscribeExternalPose;
+  ros::Subscriber m_subscribeCmdVelocityWorld;
   ros::Publisher m_pubImu;
   ros::Publisher m_pubTemp;
   ros::Publisher m_pubMag;
